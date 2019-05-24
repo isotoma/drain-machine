@@ -2,6 +2,18 @@ import boto3
 import requests
 
 
+def generate_configmap(instances):
+    return {
+        'apiVersion': 'v1',
+        'kind': 'ConfigMap',
+        'metadata': {
+            'name': 'drain-machine-status',
+        },
+        'data': {
+            'terminating': " ".join(instances),
+        },
+    }
+
 def get_region():
     response = requests.get("http://169.254.169.254/2016-09-02/dynamic/instance-identity/document")
     return response.json()['region']

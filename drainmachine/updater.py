@@ -1,8 +1,10 @@
+import json
 import logging
+import subprocess
 import sys
 from time import sleep
 
-from .utils import get_cluster_instances
+from .utils import generate_configmap, get_cluster_instances
 
 logger = logging.getLogger("drainmachine")
 
@@ -12,4 +14,10 @@ def run(cluster):
     while True:
         instances = list(get_cluster_instances(cluster))
         print(instances)
+        configmap = generate_configmap(instances)
+        subprocess.run(
+            ['/app/kubectl', '-n', 'kube-system', 'apply', '-f', '-'],
+            encoding='utf-8',
+            input=json.dumps(configmap),
+        )
         sleep(10)
