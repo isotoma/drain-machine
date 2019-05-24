@@ -38,7 +38,7 @@ def complete_lifecycle_action():
     instance = instance_id()
     client = boto3.client('autoscaling', region_name=region)
     resp = client.describe_auto_scaling_instances(InstanceIds=[instance])
-    asg = resp['AutoScalingInstances']['AutoScalingGroupName']
+    asg = resp['AutoScalingInstances'][0]['AutoScalingGroupName']
     resp = client.describe_lifecycle_hooks(AutoScalingGroupName=asg)
     hook_names = [
         x['LifecycleHookName'] 
