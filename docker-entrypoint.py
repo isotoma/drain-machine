@@ -2,7 +2,7 @@
 
 import click
 
-from drainmachine import drainer, updater
+from drainmachine import drainer, monitor
 
 
 @click.group()
@@ -14,7 +14,7 @@ def drainmachine():
 def update(cluster):
     if cluster is None:
         raise ValueError("Cluster must be specified")
-    updater.run(cluster)
+    monitor.run(cluster)
     
 @drainmachine.command()
 def daemon():

@@ -1,5 +1,9 @@
+import logging
+
 import boto3
 import requests
+
+logger = logging.getLogger("drainmachine")
 
 
 def generate_configmap(instances):
@@ -18,8 +22,37 @@ def get_region():
     response = requests.get("http://169.254.169.254/2016-09-02/dynamic/instance-identity/document")
     return response.json()['region']
 
+def instance_id():
+    response = requests.get("http://169.254.169.254/2016-09-02/meta-data/instance-id")
+    return response.text
+
+def spot_terminating():
+    response = requests.get("http://169.254.169.254/latest/meta-data/spot/termination-time")
+    return response.status_code == 200
+
 def get_tags(data):
     return dict((x['Key'], x['Value']) for x in data)
+
+def complete_lifecycle_action():
+    region = get_region()
+    instance = instance_id()
+    client = boto3.client('autoscaling', region_name=region)
+    resp = client.describe_auto_scaling_instances(InstanceIds=[instance])
+    asg = resp['AutoScalingInstances']['AutoScalingGroupName']
+    resp = client.describe_lifecycle_hooks(AutoScalingGroupName=asg)
+    hook_names = [
+        x['LifecycleHookName'] 
+        for x in resp['LifecycleHooks'] 
+        if x['LifecycleTransition'] == 'autoscaling:EC2_INSTANCE_TERMINATING'
+    ]
+    if len(hook_names) == 1:
+        resp = client.complete_lifecycle_action(
+            LifecycleHookName=hook_names[0],
+            AutoScalingGroupName=asg,
+            InstanceId=instance,
+            LifecycleActionResult='CONTINUE',
+        )
+        logger.warning("Completed lifecycle action for %s" % instance)
 
 def get_cluster_groups(cluster, region):
     client = boto3.client('autoscaling', region_name=region)
