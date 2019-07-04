@@ -30,7 +30,7 @@ def evict():
     node_name = os.environ['NODE_NAME']
     while True:
         proc = subprocess.run(
-            ['/app/kubectl', 'drain', '--ignore-daemonsets', '--force', '--timeout=60s', node_name]
+            ['/app/kubectl', 'drain', '--delete-local-data', '--ignore-daemonsets', '--force', '--timeout=60s', node_name]
         )
         if proc.returncode != 0:
             print("Not all pods can be evicted, retrying")
