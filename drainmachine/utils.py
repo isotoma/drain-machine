@@ -27,7 +27,7 @@ def instance_id():
     return response.text
 
 def spot_terminating():
-    response = requests.get("http://169.254.169.254/latest/meta-data/spot/termination-time")
+    response = requests.get("http://169.254.169.254/latest/meta-data/spot/instance-action")
     return response.status_code == 200
 
 def get_tags(data):
