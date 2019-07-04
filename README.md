@@ -66,3 +66,9 @@ http://169.254.169.254/latest/meta-data/spot/instance-action
 Which is only available to the instances themselves.
 
 If either of this conditions are true then it drains the node.
+
+# Thanks
+
+The code for drain machine was largely based on the work done in the cloud config controller from kube-aws:
+
+https://github.com/danielfm/kube-aws/blob/master/core/controlplane/config/templates/cloud-config-controller
