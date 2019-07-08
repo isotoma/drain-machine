@@ -25,6 +25,8 @@ from .utils import get_region, instance_id
 
 logger = logging.getLogger("drainmachine")
 
+boto_endpoint = os.getenv("AUTOSCALING_ENDPOINT", None)
+
 def generate_configmap(instances):
     """ Create the drain-machine-status configmap """
     return {
@@ -44,7 +46,7 @@ def get_tags(data):
 
 def get_cluster_groups(cluster, region):
     """ Return a generator of autoscaling groups that have this cluster tag """
-    client = boto3.client('autoscaling', region_name=region)
+    client = boto3.client('autoscaling', region_name=region, endpoint_url=boto_endpoint)
     response = client.describe_auto_scaling_groups()
     for group in response['AutoScalingGroups']:
         tags = get_tags(group['Tags'])
@@ -62,7 +64,10 @@ def get_cluster_instances(cluster, region=None):
 
 def run(cluster):
     """ Be a daemon """
-    logging.basicConfig(stream=sys.stderr, format='%(asctime)s %(levelname)s %(message)s')
+    logging.basicConfig(stream=sys.stderr, format='%(asctime)s %(levelname)s %(message)s', level=os.environ.get("LOGLEVEL", "INFO"))
+    logging.getLogger('boto3').setLevel(logging.WARNING)
+    logging.getLogger('botocore').setLevel(logging.WARNING)
+    logging.getLogger('requests').setLevel(logging.WARNING)
     logger = logging.getLogger("drainmachine")
     logger.warning("Starting drainmachine updater for cluster '%s'" % cluster)
     old_instances = None

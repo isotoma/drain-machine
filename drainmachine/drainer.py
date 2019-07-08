@@ -25,10 +25,13 @@ from .utils import get_region, instance_id
 
 logger = logging.getLogger("drainmachine")
 
+spot_endpoint = os.getenv("SPOT_ENDPOINT", "http://169.254.169.254/latest/meta-data/spot/instance-action")
+boto_endpoint = os.getenv("AUTOSCALING_ENDPOINT", None)
+
 def spot_terminating():
     """ Check if this spot instance is terminating. If the instance-action endpoint exists, then we're terminating """
 
-    response = requests.get("http://169.254.169.254/latest/meta-data/spot/instance-action")
+    response = requests.get(spot_endpoint)
     return response.status_code == 200
 
 
@@ -38,7 +41,7 @@ def complete_lifecycle_action():
     """
     region = get_region()
     instance = instance_id()
-    client = boto3.client('autoscaling', region_name=region)
+    client = boto3.client('autoscaling', region_name=region, endpoint_url=boto_endpoint)
     resp = client.describe_auto_scaling_instances(InstanceIds=[instance])
     asg = resp['AutoScalingInstances'][0]['AutoScalingGroupName']
     resp = client.describe_lifecycle_hooks(AutoScalingGroupName=asg)
@@ -57,7 +60,7 @@ def complete_lifecycle_action():
         logger.warning("Completed lifecycle action for %s" % instance)
 
 
-def terminating():
+def asg_terminating():
     """ Check if this instance is marked as terminating in the configmap. """
     namespace = os.environ['NAMESPACE']
     proc = subprocess.run(
@@ -72,12 +75,13 @@ def terminating():
             return False
         terminating = configmap['data']['terminating'].split()
         instance = instance_id()
+        logging.debug("terminating is %s, instance is %s" % (terminating, instance))
         return instance in terminating
     else:
         return False
 
 def evict():
-    """ Execute the drain command """
+    """ Execute the drain command. Will loop forever until it completes successfully. """
     node_name = os.environ['NODE_NAME']
     while True:
         proc = subprocess.run(
@@ -89,15 +93,20 @@ def evict():
             return
         sleep(10)
 
+def run_once():
+    """ A single loop of the daemon activity """
+    if spot_terminating() or asg_terminating():
+        logger.warning("Node is terminating, draining")
+        evict()
+        complete_lifecycle_action()
+
 def run():
     """ Do the daemon stuff. """
-    logging.basicConfig(stream=sys.stderr, format='%(asctime)s %(levelname)s %(message)s')
+    logging.basicConfig(stream=sys.stderr, format='%(asctime)s %(levelname)s %(message)s', level=os.environ.get("LOGLEVEL", "INFO"))
+    logging.getLogger('boto3').setLevel(logging.WARNING)
+    logging.getLogger('botocore').setLevel(logging.WARNING)
+    logging.getLogger('requests').setLevel(logging.WARNING)
     logger.warning("Starting drainmachine daemon")
     while True:
-        spot = spot_terminating()
-        cycle = terminating()
-        if spot or cycle:
-            print("Node is terminating, draining")
-            evict()
-            complete_lifecycle_action()
+        run_once()
         sleep(10)

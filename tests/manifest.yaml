@@ -1,0 +1,205 @@
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: drain-machine-test-server
+  labels:
+    app: drain-machine-test-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: drain-machine-test-server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: drain-machine-test-server
+        app: drain-machine-test-server
+    spec:
+      serviceAccountName: drain-machine
+      containers:
+        - name: test-server
+          image: drain-machine-test-server:latest
+          imagePullPolicy: Never
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: drain-machine-test
+spec:
+  type: NodePort
+  selector:
+    app: drain-machine-test-server
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 5000
+---
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: drain-machine
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: drain-machine
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  resourceNames:
+  - drain-machine-status
+  verbs:
+  - get
+  - update
+  - create
+  - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: drain-machine
+subjects:
+- kind: ServiceAccount
+  name: drain-machine
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: drain-machine
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  name: drain-machine
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - list
+- apiGroups:
+  - ""
+  resources:
+  - pods/eviction
+  verbs:
+  - create
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - list
+  - get
+  - update
+  - patch
+- apiGroups:
+  - apps
+  resources:
+  - daemonsets
+  verbs:
+  - list
+  - delete
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: drain-machine
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: drain-machine
+subjects:
+  - kind: ServiceAccount
+    name: drain-machine
+    namespace: default
+---
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  name: drain-machine
+  labels:
+    app: drain-machine
+spec:
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: drain-machine
+    spec:
+      serviceAccountName: drain-machine
+      containers:
+        - name: drain-machine
+          image: drain-machine:latest
+          imagePullPolicy: Never
+          args: ["daemon"]
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: SPOT_ENDPOINT
+              value: http://drain-machine-test/spot_terminating
+            - name: AUTOSCALING_ENDPOINT
+              value: http://drain-machine-test/autoscaler
+            - name: REGION_ENDPOINT
+              value: http://drain-machine-test/region
+            - name: INSTANCE_ID_ENDPOINT
+              value: http://drain-machine-test/instance_id
+            - name: AWS_ACCESS_KEY_ID
+              value: foo
+            - name: AWS_SECRET_ACCESS_KEY
+              value: bar
+            - name: LOGLEVEL
+              value: DEBUG
+---
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: drain-machine-monitor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: drain-machine-monitor
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: drain-machine-monitor
+    spec:
+      serviceAccountName: drain-machine
+      containers:
+        - name: drain-machine
+          image: drain-machine:latest
+          imagePullPolicy: Never
+          args: ["update", "--cluster", "cluster"]
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: REGION_ENDPOINT
+              value: http://drain-machine-test/region
+            - name: INSTANCE_ID_ENDPOINT
+              value: http://drain-machine-test/instance_id
+            - name: AUTOSCALING_ENDPOINT
+              value: http://drain-machine-test/autoscaler
+            - name: AWS_ACCESS_KEY_ID
+              value: foo
+            - name: AWS_SECRET_ACCESS_KEY
+              value: bar
+            - name: LOGLEVEL
+              value: DEBUG
