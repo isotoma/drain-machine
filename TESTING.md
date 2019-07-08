@@ -24,3 +24,6 @@ Or:
 
 To fake a spot instance termination message.
 
+Note that because minikube has only a single node, which is also the master, once drain-machine has cordoned and drained the node it is irrecoverable!
+
+This makes the testing useful for smoke testing, but for a proper end-to-end test you need a real cluster.
